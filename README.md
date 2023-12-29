@@ -1,3 +1,4 @@
+
 # Real-time Chat Application
 
 This is a simple real-time chat application built using Node.js, Express, and Socket.io.
@@ -21,3 +22,4 @@ git clone https://github.com/shantanubhise/chat-application.git
 cd chat-application
 npm install
 node app.js
+
