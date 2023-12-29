@@ -4,32 +4,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>iChat - Node Realtime Socket.io Chat App</title>
-
-    <script defer src="http://localhost:8000/socket.io/socket.io.js"></script>
-    <script defer src="js/client.js"></script>
-    <link rel="stylesheet" href="css/style.css">
-
+    <title>Real-time Chat</title>
+    <!-- <script defer src="/socket.io/socket.io.js"></script> -->
+    <script>
+        // Use the default port 3000 if not specified
+        const currentPort = window.location.port || '3000';
+        // Update the script source to point to the correct Socket.IO endpoint
+        document.write(`<script defer src="http://localhost:${currentPort}/socket.io/socket.io.js"><\/script>`);
+    </script>
+    <script defer src="assets/js/client.js"></script>
+    <link rel="stylesheet" href="assets/css/style.css">
 </head>
 
 <body>
     <nav>
         <img class="logo" src="chat.png" alt="">
-        <h1>Welcome to iChat Application</h1>
+        <h1>Welcome to Real-time Chat Application </h1>
     </nav>
-    <div class="container">
-        <div class="message right">Harry: Hi. How are you?</div>
-        <div class="message left">Rohan: I'm fine. How about you?</div>
-    </div>
+
+    <!-- Use an empty ul element to dynamically append chat messages -->
+    <ul id="messages" class="container"></ul>
 
     <div class="send">
         <form action="#" id="send-container">
             <input type="text" name="messageInp" id="messageInp">
             <button class="btn" type="submit">Send</button>
-
         </form>
     </div>
-
 </body>
 
 </html>
