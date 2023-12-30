@@ -35,10 +35,13 @@ const redisPublisher = new Redis({
 });
 
 
-// Subscribe to the 'chat-messages' channel in Redis
-redisSubscriber.subscribe('chat-messages');
+// Subscribe to the 'MESSAGES' channel in Redis
+redisSubscriber.subscribe('MESSAGES');
 
 const users = {};
+
+// Initialize variables for message batch
+const messageBatch = [];
 
 io.on('connection', socket => {
     console.log(`User connected. Socket ID: ${socket.id}`);
@@ -49,12 +52,18 @@ io.on('connection', socket => {
     });
 
     // Event: send message
-    socket.on('send', message => {
+    socket.on('send', async (message) => {
         // socket.broadcast.emit('receive', { message: message, name: users[socket.id] });
         try {
             const senderId = socket.id;
-            // Publish the message to the 'chat-messages' channel in Redis
-            redisPublisher.publish('chat-messages', JSON.stringify({ message, name: users[socket.id], senderId }));
+
+            // Publish the message to the 'MESSAGES' channel in Redis
+            redisPublisher.publish('MESSAGES', JSON.stringify({ message, name: users[socket.id], senderId }));
+            // Add the message to the batch for processing
+            messageBatch.push({
+                content: message,
+                created_by: users[socket.id],
+            });
         } catch (error) {
             console.error('Error publishing message to Redis:', error.message);
         }
@@ -70,15 +79,9 @@ io.on('connection', socket => {
 // Handle messages received from Redis within the Socket.IO connection
 redisSubscriber.on('message', async (channel, message) => {
     try {
-        if (channel === "chat-messages") {
+        if (channel === "MESSAGES") {
             const data = JSON.parse(message);
             console.log('Received data from Redis:', data);
-
-              // Save the message to the database using Sequelize
-              const storedMessage = await Message.create({
-                content: data.message,
-                created_by: data.name,
-            });
 
             // Broadcast the message to all connected clients
             io.emit('receive', data);
@@ -87,6 +90,23 @@ redisSubscriber.on('message', async (channel, message) => {
         console.error('Error processing message from Redis:', error.message);
     }
 });
+
+// Function to process and save the batch of messages to the database
+async function processAndSaveBatch() {
+    try {
+        if (messageBatch.length > 0) {
+            const batchMessages = [...messageBatch];
+            messageBatch.length = 0; // Clear the batch
+
+            await Message.bulkCreate(batchMessages);
+        }
+    } catch (error) {
+        console.error('Error processing and saving batch to the database:', error.message);
+    }
+};
+
+// Schedule batch processing every 10 seconds
+setInterval(processAndSaveBatch, 10000);
 
 // Serve the index.html file
 app.get('/', (req, res) => {
