@@ -12,9 +12,12 @@ const userName = prompt("Enter your name to join.");
 socket.emit('new-user-joined', userName);
 
 // Function to append messages to the chat container
-const appendMessage = (data) => {
-    const {message, name, senderId} = data;
-    const position = senderId === socket.id ? 'right' : 'left';
+const appendMessage = (data, position='left') => {
+    let {message, name, senderId} = data;
+    if(senderId === socket.id){
+        position = 'right';
+        name = 'You';
+    }
     const messageElement = document.createElement('li');
     messageElement.innerText = `${name}: ${message}`;
     messageElement.classList.add('message');

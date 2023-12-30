@@ -4,6 +4,20 @@ const http = require('http');
 const socketIO = require('socket.io');
 const path = require('path');
 const Redis = require('ioredis');
+const sequelize = require('./sequelize');
+const Message = require('./models/message');
+
+
+
+// Sync Sequelize models with the database
+sequelize.sync()
+    .then(() => {
+        console.log('Sequelize models synced with the database');
+    })
+    .catch((error) => {
+        console.error('Error syncing Sequelize models:', error.message);
+    });
+
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +33,7 @@ const redisPublisher = new Redis({
     host: 'localhost',
     port: 6379
 });
+
 
 // Subscribe to the 'chat-messages' channel in Redis
 redisSubscriber.subscribe('chat-messages');
@@ -53,13 +68,19 @@ io.on('connection', socket => {
 });
 
 // Handle messages received from Redis within the Socket.IO connection
-redisSubscriber.on('message', (channel, message) => {
+redisSubscriber.on('message', async (channel, message) => {
     try {
         if (channel === "chat-messages") {
-        const data = JSON.parse(message);
-        console.log('Received data from Redis:', data);
+            const data = JSON.parse(message);
+            console.log('Received data from Redis:', data);
 
-        // Broadcast the message to all connected clients
+              // Save the message to the database using Sequelize
+              const storedMessage = await Message.create({
+                content: data.message,
+                created_by: data.name,
+            });
+
+            // Broadcast the message to all connected clients
             io.emit('receive', data);
         }
     } catch (error) {
