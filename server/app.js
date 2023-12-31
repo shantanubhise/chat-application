@@ -6,6 +6,7 @@ const path = require('path');
 const Redis = require('ioredis');
 const sequelize = require('./sequelize');
 const Message = require('./models/message');
+const { connectToKafka, produceMessage, subscribeToTopic } = require('./kafka');
 
 
 
@@ -22,6 +23,7 @@ sequelize.sync()
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
+connectToKafka();
 
 // Create a new Redis instance for communication between server instances
 const redisSubscriber = new Redis({
@@ -40,8 +42,6 @@ redisSubscriber.subscribe('MESSAGES');
 
 const users = {};
 
-// Initialize variables for message batch
-const messageBatch = [];
 
 io.on('connection', socket => {
     console.log(`User connected. Socket ID: ${socket.id}`);
@@ -55,15 +55,15 @@ io.on('connection', socket => {
     socket.on('send', async (message) => {
         // socket.broadcast.emit('receive', { message: message, name: users[socket.id] });
         try {
-            const senderId = socket.id;
-
+            const data = {
+                message,
+                name: users[socket.id],
+                senderId: socket.id
+            }
             // Publish the message to the 'MESSAGES' channel in Redis
-            redisPublisher.publish('MESSAGES', JSON.stringify({ message, name: users[socket.id], senderId }));
-            // Add the message to the batch for processing
-            messageBatch.push({
-                content: message,
-                created_by: users[socket.id],
-            });
+            await redisPublisher.publish('MESSAGES', JSON.stringify(data));
+            // Publish the message to the 'MESSAGES' topic in Kafka
+            await produceMessage('MESSAGES', data);
         } catch (error) {
             console.error('Error publishing message to Redis:', error.message);
         }
@@ -91,22 +91,57 @@ redisSubscriber.on('message', async (channel, message) => {
     }
 });
 
-// Function to process and save the batch of messages to the database
-async function processAndSaveBatch() {
-    try {
-        if (messageBatch.length > 0) {
-            const batchMessages = [...messageBatch];
-            messageBatch.length = 0; // Clear the batch
+// Initialize variables for message batch and batch size
+const messageBatch = [];
+const batchSize = 10;
 
-            await Message.bulkCreate(batchMessages);
+// Function to process and save the batch of messages to the database
+async function processAndSaveBatch(batch) {
+    try {
+        console.log('Processing message batch', batch.length);
+        if (batch.length > 0) {
+            // Process and save the batch of messages to the database using Sequelize
+            await Message.bulkCreate(batch)
+            console.log('Batch of messages saved to the database:', batch);
         }
     } catch (error) {
         console.error('Error processing and saving batch to the database:', error.message);
     }
-};
+}
 
-// Schedule batch processing every 10 seconds
-setInterval(processAndSaveBatch, 10000);
+subscribeToTopic('MESSAGES', async (data) => {
+    try {
+        console.log('Received data from Kafka:', data);
+
+        // Add the message to the batch for processing
+        messageBatch.push({
+            content: data.message,
+            created_by: data.name,
+        });
+        console.log('messageBatch length:', messageBatch.length);
+
+        // Check if the batch size is reached
+        if (messageBatch.length >= batchSize) {
+            const batchToProcess = extractAndClearBatch();
+            await processAndSaveBatch(batchToProcess);
+        }
+    } catch (error) {
+        console.error('Error processing message from Kafka:', error.message);
+    }
+});
+
+// Periodically process and save remaining messages in the batch
+setInterval(async () => {
+    const batchToProcess = extractAndClearBatch();
+    await processAndSaveBatch(batchToProcess);
+}, 5 * 1000);
+
+// Function to create a copy of the message batch and clear it
+function extractAndClearBatch() {
+    const batchCopy = [...messageBatch];
+    messageBatch.length = 0;
+    return batchCopy;
+}
 
 // Serve the index.html file
 app.get('/', (req, res) => {
