@@ -5,7 +5,7 @@ const socket = io(`http://localhost:${envPort}`, { transports: ['websocket'] });
 const form = document.getElementById('send-container');
 const messageInput = document.getElementById('messageInp');
 const messageContainer = document.getElementById('messages');
-var audio = new Audio('Message notification.mp3');
+var audio = new Audio('../assets/audios/Message notification.mp3');
 
 // Prompt for the username once when the page loads
 const userName = prompt("Enter your name to join.");
